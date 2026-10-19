@@ -3,6 +3,8 @@ import urllib.parse
 from django.conf import settings
 from django.contrib import admin
 from django.core.files.storage import default_storage
+from django.http.response import FileResponse
+from django.http.response import Http404
 from django.http.response import HttpResponseNotFound
 from django.http.response import HttpResponseRedirect
 from django.urls import include
@@ -13,6 +15,7 @@ from drf_yasg.views import get_schema_view
 from rest_framework import permissions
 
 from .urls import urlpatterns
+from contentcuration.utils.local_storage import LocalFileStorage
 
 
 def webpack_redirect_view(request):
@@ -30,6 +33,11 @@ def file_server(request, storage_path=None):
     # access even if they don't need to log in
     if storage_path is None:
         return HttpResponseNotFound()
+
+    if isinstance(default_storage, LocalFileStorage):
+        if not default_storage.exists(storage_path):
+            raise Http404()
+        return FileResponse(default_storage.open(storage_path, "rb"))
 
     params = urllib.parse.urlparse(default_storage.url(storage_path)).query
     # Unset: minio published beside Studio, not on the browser's own machine.

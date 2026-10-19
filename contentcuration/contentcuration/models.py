@@ -111,6 +111,7 @@ from contentcuration.viewsets.sync.constants import PUBLISHABLE_CHANGE_TABLES
 from contentcuration.viewsets.sync.constants import PUBLISHED
 from contentcuration.viewsets.sync.constants import SESSION
 from contentcuration.viewsets.sync.utils import generate_update_event
+from contentcuration.utils.local_storage import LocalFileStorage
 
 EDIT_ACCESS = "edit"
 VIEW_ACCESS = "view"
@@ -895,8 +896,8 @@ def generate_storage_url(filename, request=None, *args):
     run_mode = os.getenv("RUN_MODE")
 
     # if we're running inside k8s, then just serve the normal /content/{storage,databases} URL,
-    # and let nginx handle proper proxying.
-    if run_mode == "k8s":
+    # and let nginx handle proper proxying. Files in local storage are served at the same URL.
+    if run_mode == "k8s" or isinstance(default_storage, LocalFileStorage):
         url = "/content/{path}".format(
             path=path,
         )

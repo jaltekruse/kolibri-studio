@@ -8,6 +8,8 @@ from .files import determine_content_type
 from .files import hex_to_base64
 from .gcs_storage import CompositeGCS
 from .gcs_storage import GoogleCloudStorage
+from .local_storage import get_local_upload_url
+from .local_storage import LocalFileStorage
 
 
 class UnknownStorageBackendError(Exception):
@@ -40,7 +42,8 @@ def get_presigned_upload_url(
         mimetype: the mimetype that will be required to send as part of the file upload's mimetype header
         uploadURL: the URL to upload the file to.
 
-    :raises: :class:`UnknownStorageBackendError`: If the storage backend is not S3 or GCS.
+    :raises: :class:`UnknownStorageBackendError`: If the storage backend is not S3, GCS
+        or local storage.
     """
 
     # Aron: note that content_length is not used right now because
@@ -60,9 +63,11 @@ def get_presigned_upload_url(
         upload_url = _get_s3_presigned_put_url(
             client, bucket, filepath, md5sum_b64, lifetime_sec
         )
+    elif isinstance(storage, LocalFileStorage):
+        upload_url = get_local_upload_url(filepath, md5_hex, lifetime_sec)
     else:
         raise UnknownStorageBackendError(
-            "Please ensure your storage backend is either Google Cloud Storage or S3 Storage!"
+            "Please ensure your storage backend is Google Cloud Storage, S3 Storage or local storage!"
         )
 
     return {"mimetype": mimetype, "uploadURL": upload_url}

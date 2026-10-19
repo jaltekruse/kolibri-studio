@@ -28,6 +28,7 @@ from rest_framework import routers
 import contentcuration.views.admin as admin_views
 import contentcuration.views.base as views
 import contentcuration.views.internal as internal_views
+import contentcuration.views.local_storage as local_storage_views
 import contentcuration.views.nodes as node_views
 import contentcuration.views.settings as settings_views
 import contentcuration.views.subscription as subscription_views
@@ -337,6 +338,15 @@ urlpatterns += [
         r"^api/stripe/webhook/$",
         subscription_views.stripe_webhook,
         name="stripe_webhook",
+    ),
+]
+
+# Uploads to local file storage, when Studio runs without object storage
+urlpatterns += [
+    re_path(
+        r"^api/local_storage/upload/(?P<token>[^/]+)$",
+        local_storage_views.upload_to_local_storage,
+        name="local_storage_upload",
     ),
 ]
 

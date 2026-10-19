@@ -50,6 +50,7 @@ from contentcuration.utils.assessment.qti.archive import hex_to_qti_id
 from contentcuration.utils.assessment.qti.validation import parse_qti_xml
 from contentcuration.utils.assessment.qti.validation import validate_qti_item
 from contentcuration.utils.celery.tasks import generate_task_signature
+from contentcuration.utils.publish import channel_version_exported
 from contentcuration.utils.publish import ChannelIncompleteError
 from contentcuration.utils.publish import convert_channel_thumbnail
 from contentcuration.utils.publish import create_content_database
@@ -1649,6 +1650,81 @@ class PublishFailCleansUpTaskObjects(StudioTestCase):
                 channel_id=channel_id, user=self.user, signature=signature
             )
             assert new_custom_task_metadata.task_id == new_task_result.task_id
+
+
+class ChannelVersionExportedTestCase(StudioTestCase):
+    """
+    Publishing tells receivers of channel_version_exported about each new version
+    once its database is saved, and fails if a receiver does.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.patch_copy_db = patch("contentcuration.utils.publish.save_export_database")
+        cls.patch_copy_db.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls.patch_copy_db.stop()
+
+    def setUp(self):
+        super().setUp()
+        self.content_channel = channel()
+        self.content_channel.version = 3
+        self.content_channel.save()
+        video = create_node({"kind_id": "video", "title": "Video", "children": []})
+        video.complete = True
+        video.parent = self.content_channel.main_tree
+        video.save()
+        self.exported = []
+
+    def receive(self, receiver):
+        channel_version_exported.connect(receiver, weak=False)
+        self.addCleanup(channel_version_exported.disconnect, receiver)
+
+    def record(self, sender, channel, version, **kwargs):
+        published_version = cc.Channel.objects.get(pk=channel.id).version
+        self.exported.append((channel.id, version, published_version))
+
+    def run_publish(self, is_draft_version=False):
+        publish_channel(
+            self.admin_user.id,
+            self.content_channel.id,
+            send_email=False,
+            is_draft_version=is_draft_version,
+        )
+
+    def test_sent_before_the_new_version_is_recorded(self):
+        self.receive(self.record)
+
+        self.run_publish()
+
+        self.assertEqual(self.exported, [(self.content_channel.id, 4, 3)])
+        self.content_channel.refresh_from_db()
+        self.assertEqual(self.content_channel.version, 4)
+
+    def test_not_sent_for_drafts(self):
+        self.receive(self.record)
+
+        self.run_publish(is_draft_version=True)
+
+        self.assertEqual(self.exported, [])
+
+    def test_publish_fails_when_a_receiver_fails(self):
+        def fail(sender, **kwargs):
+            raise RuntimeError("Not available elsewhere")
+
+        self.receive(fail)
+
+        with self.assertRaises(RuntimeError):
+            self.run_publish()
+
+        self.content_channel.refresh_from_db()
+        self.assertEqual(self.content_channel.version, 3)
+        self.assertFalse(self.content_channel.main_tree.published)
+        self.assertFalse(self.content_channel.main_tree.publishing)
 
 
 class PublishStagingTreeTestCase(StudioTestCase):

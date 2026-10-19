@@ -21,6 +21,7 @@ from django.db.models import Q
 from django.db.models import Subquery
 from django.db.models import Sum
 from django.db.utils import IntegrityError
+from django.dispatch import Signal
 from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -70,6 +71,13 @@ MIN_SCHEMA_VERSION = "1"
 # Largest value the legacy 32-bit LocalFile.file_size / File.file_size columns hold.
 INT_32BIT_MAX = 2 ** 31 - 1
 PUBLISHING_UPDATE_THRESHOLD = 3600
+
+
+# Sent once the content database of a channel's new version is saved in storage,
+# before the new version is recorded, with the channel and the version number.
+# Receivers can make the version available somewhere else before the publish
+# completes; if a receiver raises, the publish fails.
+channel_version_exported = Signal()
 
 
 class NoNodesChangedError(Exception):
@@ -1251,6 +1259,10 @@ def publish_channel(  # noqa: C901
             is_draft_version=is_draft_version,
             use_staging_tree=use_staging_tree,
         )
+        if not is_draft_version:
+            channel_version_exported.send(
+                sender=ccmodels.Channel, channel=channel, version=channel.version + 1
+            )
         add_tokens_to_channel(channel)
         if is_draft_version:
             draft_channel_version = create_draft_channel_version(channel)
