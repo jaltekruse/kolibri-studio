@@ -44,6 +44,7 @@ from rest_framework.serializers import ValidationError
 from contentcuration.constants import (
     completion_criteria as completion_criteria_validator,
 )
+from contentcuration.constants.contentnode import PAGE_MARKDOWN
 from contentcuration.db.models.expressions import IsNull
 from contentcuration.db.models.query import RIGHT_JOIN
 from contentcuration.db.models.query import With
@@ -61,6 +62,7 @@ from contentcuration.tasks import calculate_resource_size_task
 from contentcuration.utils.nodes import calculate_resource_size
 from contentcuration.utils.nodes import migrate_extra_fields
 from contentcuration.utils.nodes import validate_and_conform_to_schema_threshold_none
+from contentcuration.utils.pages import set_page_image_files
 from contentcuration.utils.pagination import ValuesViewsetCursorPagination
 from contentcuration.viewsets.base import BulkListSerializer
 from contentcuration.viewsets.base import BulkModelSerializer
@@ -252,13 +254,26 @@ class ContentNodeListSerializer(BulkListSerializer):
     def update(self, queryset, all_validated_data):
         tags = self.gather_tags(all_validated_data)
         modified = now()
+        edited_page_ids = set()
         for data in all_validated_data:
             data["modified"] = modified
+            if PAGE_MARKDOWN in data.get("extra_fields", {}):
+                edited_page_ids.add(self.child.id_value_lookup(data))
         all_objects = super(ContentNodeListSerializer, self).update(
             queryset, all_validated_data
         )
         if tags:
             set_tags(tags)
+        if edited_page_ids:
+            set_page_image_files(
+                [
+                    node
+                    for node in all_objects
+                    if self.child.id_value_lookup(node) in edited_page_ids
+                    and node.is_page
+                ],
+                self.context["request"].user,
+            )
         return all_objects
 
 
@@ -319,6 +334,7 @@ class ExtraFieldsSerializer(JSONFieldDictSerializer):
         required=False,
     )
     inherited_metadata = InheritedMetadataSerializer(required=False)
+    page_markdown = CharField(required=False, allow_blank=True, trim_whitespace=False)
 
     def update(self, instance, validated_data):
         instance = migrate_extra_fields(instance)

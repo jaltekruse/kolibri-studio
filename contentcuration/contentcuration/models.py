@@ -83,6 +83,7 @@ from contentcuration.constants import completion_criteria
 from contentcuration.constants import feedback
 from contentcuration.constants import user_history
 from contentcuration.constants.contentnode import kind_activity_map
+from contentcuration.constants.contentnode import PAGE_MARKDOWN
 from contentcuration.constants.organization_roles import ORGANIZATION_ADMIN
 from contentcuration.constants.organization_roles import ORGANIZATION_CHANNEL_EDIT_ROLES
 from contentcuration.constants.organization_roles import ORGANIZATION_EDITOR
@@ -2919,6 +2920,13 @@ class ContentNode(MPTTModel, models.Model):
         for editor in self.files.values_list("uploaded_by_id", flat=True).distinct():
             calculate_user_storage(editor)
 
+    @property
+    def is_page(self):
+        """A document written in Studio's editor, rather than uploaded"""
+        return self.kind_id == content_kinds.DOCUMENT and isinstance(
+            (self.extra_fields or {}).get(PAGE_MARKDOWN), str
+        )
+
     def mark_complete(self):  # noqa C901
         errors = []
         # Is complete if title is falsy but only if not a root node.
@@ -2935,7 +2943,11 @@ class ContentNode(MPTTModel, models.Model):
                 and not self.copyright_holder
             ):
                 errors.append("Missing required copyright holder")
-            if (
+            if self.is_page:
+                # Publishing makes a page's file from its Markdown
+                if not self.extra_fields[PAGE_MARKDOWN].strip():
+                    errors.append("Empty page")
+            elif (
                 self.kind_id != content_kinds.EXERCISE
                 and not self.files.filter(preset__supplementary=False).exists()
             ):
