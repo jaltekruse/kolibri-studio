@@ -268,6 +268,7 @@
   import ResourceDrawer from '../components/ResourceDrawer';
   import {
     RouteNames,
+    TabNames,
     viewModes,
     DraggableRegions,
     DraggableUniverses,
@@ -284,6 +285,7 @@
     ContentKindLearningActivityDefaults,
   } from 'shared/leUtils/ContentKinds';
   import { titleMixin, routerMixin } from 'shared/mixins';
+  import { PAGE_MARKDOWN } from 'shared/utils/pages';
   import { RELATIVE_TREE_POSITIONS } from 'shared/data/constants';
   import { DraggableTypes, DropEffect } from 'shared/mixins/draggable/constants';
   import { DraggableFlags } from 'shared/vuex/draggablePlugin/module/constants';
@@ -295,6 +297,7 @@
     ADD_TOPIC: 'add-topic',
     UPLOAD_FILES: 'upload-files',
     ADD_EXERCISE: 'add-exercise',
+    ADD_PAGE: 'add-page',
     IMPORT_FROM_CHANNELS: 'import-from-channels',
   };
 
@@ -560,6 +563,7 @@
           { label: this.$tr('addTopic'), value: AddMenuOptions.ADD_TOPIC },
           { label: this.$tr('uploadFiles'), value: AddMenuOptions.UPLOAD_FILES },
           { label: this.$tr('addExercise'), value: AddMenuOptions.ADD_EXERCISE },
+          { label: this.$tr('addPage'), value: AddMenuOptions.ADD_PAGE },
           { label: this.$tr('importFromChannels'), value: AddMenuOptions.IMPORT_FROM_CHANNELS },
         ];
       },
@@ -711,11 +715,11 @@
         const title = detailTitle ? `${detailTitle} - ${topicTitle}` : topicTitle;
         this.updateTabTitle(this.$store.getters.appendChannelName(title));
       },
-      newContentNode(route, payload) {
+      newContentNode(route, payload, tab) {
         this.createContentNode({ parent: this.topicId, ...payload }).then(newId => {
           this.$router.push({
             name: route,
-            params: { detailNodeIds: newId },
+            params: { detailNodeIds: newId, tab },
           });
         });
       },
@@ -737,6 +741,18 @@
         };
         this.newContentNode(RouteNames.ADD_EXERCISE, nodeData);
         this.trackClickEvent('Add exercise');
+      },
+      newPageNode() {
+        const nodeData = {
+          kind: ContentKindsNames.DOCUMENT,
+          title: '',
+          extra_fields: { [PAGE_MARKDOWN]: '' },
+          learning_activities: {
+            [ContentKindLearningActivityDefaults[ContentKindsNames.DOCUMENT]]: true,
+          },
+        };
+        this.newContentNode(RouteNames.ADD_PAGE, nodeData, TabNames.PAGE);
+        this.trackClickEvent('Add page');
       },
       editNodes(ids) {
         this.trackClickEvent('Edit');
@@ -1028,6 +1044,9 @@
           case AddMenuOptions.ADD_EXERCISE:
             this.newExerciseNode();
             break;
+          case AddMenuOptions.ADD_PAGE:
+            this.newPageNode();
+            break;
           case AddMenuOptions.IMPORT_FROM_CHANNELS:
             this.trackClickEvent('Import from other channels');
             this.$router.push(this.importFromChannelsRoute);
@@ -1051,6 +1070,7 @@
       addTopic: 'New folder',
       sortAlphabetically: 'Sort alphabetically',
       addExercise: 'New exercise',
+      addPage: 'New page',
       uploadFiles: 'Upload files',
       importFromChannels: 'Import from channels',
       addButton: 'Add',

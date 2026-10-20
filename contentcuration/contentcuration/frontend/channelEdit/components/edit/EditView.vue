@@ -100,6 +100,34 @@
               </VChip>
             </VTab>
 
+            <!-- Page tab -->
+            <VTab
+              v-if="showPageTab"
+              ref="pagetab"
+              :href="`#${tabs.PAGE}`"
+              @click="trackTab('Page')"
+            >
+              {{ $tr(tabs.PAGE) }}
+              <VTooltip
+                v-if="isPageEmpty"
+                top
+                lazy
+              >
+                <template #activator="{ on }">
+                  <VIconWrapper
+                    color="red"
+                    dark
+                    small
+                    class="ml-2"
+                    v-on="on"
+                  >
+                    error
+                  </VIconWrapper>
+                </template>
+                <span>{{ $tr('invalidFieldsToolTip') }}</span>
+              </VTooltip>
+            </VTab>
+
             <!-- Related resources tab -->
             <VTab
               v-if="showRelatedResourcesTab"
@@ -170,6 +198,16 @@
               <AssessmentTab :nodeId="nodeIds[0]" />
             </VTabItem>
             <VTabItem
+              :key="tabs.PAGE"
+              :value="tabs.PAGE"
+              lazy
+            >
+              <PageTab
+                v-if="showPageTab"
+                :nodeId="nodeIds[0]"
+              />
+            </VTabItem>
+            <VTabItem
               :key="tabs.RELATED"
               :value="tabs.RELATED"
               lazy
@@ -193,8 +231,10 @@
   import { TabNames } from '../../constants';
   import AssessmentTab from '../../components/AssessmentTab/AssessmentTab';
   import RelatedResourcesTab from '../../components/RelatedResourcesTab/RelatedResourcesTab';
+  import PageTab from '../../components/PageTab/PageTab';
   import DetailsTabView from './DetailsTabView';
   import { ContentKindsNames } from 'shared/leUtils/ContentKinds';
+  import { isPage, pageIsEmpty } from 'shared/utils/pages';
   import ToolBar from 'shared/views/ToolBar';
   import Tabs from 'shared/views/Tabs';
 
@@ -211,6 +251,7 @@
     components: {
       DetailsTabView,
       AssessmentTab,
+      PageTab,
       RelatedResourcesTab,
       Tabs,
       ToolBar,
@@ -261,6 +302,12 @@
       },
       showQuestionsTab() {
         return this.oneSelected && this.firstNode && this.firstNode.kind === 'exercise';
+      },
+      showPageTab() {
+        return this.oneSelected && isPage(this.firstNode);
+      },
+      isPageEmpty() {
+        return this.showPageTab && pageIsEmpty(this.firstNode);
       },
       showRelatedResourcesTab() {
         return this.oneSelected && this.firstNode && this.firstNode.kind !== 'topic';
@@ -417,6 +464,8 @@
       preview: 'Preview',
       /** @see TabNames.QUESTIONS */
       questions: 'Questions',
+      /** @see TabNames.PAGE */
+      page: 'Page',
       /** @see TabNames.RELATED */
       related: 'Related',
       /* eslint-enable kolibri/vue-no-unused-translations */

@@ -215,6 +215,20 @@ const router = new VueRouter({
       },
     },
     {
+      name: RouteNames.ADD_PAGE,
+      path: '/:nodeId/:detailNodeId?/page/:detailNodeIds/:tab?',
+      props: true,
+      component: EditModal,
+      beforeEnter: (to, from, next) => {
+        return store
+          .dispatch('currentChannel/loadChannel')
+          .catch(error => {
+            throw new Error(error);
+          })
+          .then(() => next());
+      },
+    },
+    {
       name: RouteNames.UPLOAD_FILES,
       path: '/:nodeId/:detailNodeId?/upload/:detailNodeIds?/:tab?',
       props: true,

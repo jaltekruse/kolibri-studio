@@ -12,6 +12,7 @@ export const RouteNames = {
   IMPORT_FROM_CHANNELS_REVIEW: 'IMPORT_FROM_CHANNELS_REVIEW',
   ADD_TOPICS: 'ADD_TOPICS',
   ADD_EXERCISE: 'ADD_EXERCISE',
+  ADD_PAGE: 'ADD_PAGE',
   UPLOAD_FILES: 'UPLOAD_FILES',
   TRASH: 'TRASH',
   ADD_PREVIOUS_STEPS: 'ADD_PREVIOUS_STEPS',
@@ -34,6 +35,7 @@ export const TabNames = {
   DETAILS: 'details',
   PREVIEW: 'preview',
   QUESTIONS: 'questions',
+  PAGE: 'page',
   RELATED: 'related',
 };
 

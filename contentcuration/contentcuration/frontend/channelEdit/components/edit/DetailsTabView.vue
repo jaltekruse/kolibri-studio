@@ -11,7 +11,7 @@
       class="px-2"
     >
       <!-- File upload and preview section -->
-      <template v-if="oneSelected && allResources && !allExercises">
+      <template v-if="oneSelected && allResources && !allExercises && !isPage(firstNode)">
         <FileUpload
           v-if="oneSelected && allResources && !allExercises"
           :key="firstNode.id"
@@ -502,6 +502,7 @@
   import { constantsTranslationMixin, metadataTranslationMixin } from 'shared/mixins';
   import { crossComponentTranslator } from 'shared/i18n';
   import { LanguagesNames } from 'shared/leUtils/Languages';
+  import { isPage } from 'shared/utils/pages';
 
   function getValueFromResults(results) {
     if (results.length === 0) {
@@ -866,6 +867,7 @@
       this.$nextTick(this.handleValidation);
     },
     methods: {
+      isPage,
       ...mapActions(['setUnsavedChanges']),
       ...mapActions('contentNode', ['updateContentNode', 'addTags', 'removeTags']),
       ...mapActions('file', ['updateFile', 'deleteFile']),

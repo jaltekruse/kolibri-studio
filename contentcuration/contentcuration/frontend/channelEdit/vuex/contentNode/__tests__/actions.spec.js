@@ -5,6 +5,7 @@ import file from 'shared/vuex/file';
 import { ContentNode } from 'shared/data/resources';
 import storeFactory from 'shared/vuex/baseStore';
 import { ContentKindsNames } from 'shared/leUtils/ContentKinds';
+import { PAGE_MARKDOWN } from 'shared/utils/pages';
 import { mockChannelScope, resetMockChannelScope } from 'shared/utils/testing';
 
 jest.mock('../../currentChannel/index');
@@ -162,6 +163,32 @@ describe('contentNode actions', () => {
             changed: true,
             complete: false,
             learning_activities: { test: true },
+          });
+          updateSpy.mockRestore();
+        });
+    });
+  });
+  describe('updateContentNode action for a page', () => {
+    it("saves the page's Markdown, keeping its other extra fields", () => {
+      store.commit('contentNode/ADD_CONTENTNODE', {
+        id,
+        title: 'Solving equations',
+        kind: ContentKindsNames.DOCUMENT,
+        extra_fields: { [PAGE_MARKDOWN]: '', suggested_duration_type: 'time' },
+      });
+      const updateSpy = jest.spyOn(ContentNode, 'update');
+      return store
+        .dispatch('contentNode/updateContentNode', {
+          id,
+          extra_fields: { [PAGE_MARKDOWN]: '# Solving equations' },
+        })
+        .then(() => {
+          expect(updateSpy).toHaveBeenCalledWith(id, {
+            extra_fields: {
+              [PAGE_MARKDOWN]: '# Solving equations',
+              suggested_duration_type: 'time',
+            },
+            changed: true,
           });
           updateSpy.mockRestore();
         });
