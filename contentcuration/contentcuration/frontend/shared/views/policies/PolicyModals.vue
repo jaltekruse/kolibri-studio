@@ -78,7 +78,10 @@
         this.$router.push(toRoute);
       },
       closePolicy() {
-        this.$router.push({ query: {} });
+        // A policy that needs accepting opens without the query, leaving none to clear
+        if (this.$route.query.showPolicy) {
+          this.$router.push({ query: {} });
+        }
       },
       handleAcceptPolicy(policy) {
         this.acceptPolicy(this.getPolicyAcceptedData(policy)).then(this.closePolicy);
