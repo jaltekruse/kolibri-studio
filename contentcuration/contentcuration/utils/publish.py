@@ -58,6 +58,7 @@ from contentcuration.utils.cache import delete_public_channel_cache_keys
 from contentcuration.utils.files import create_thumbnail_from_base64
 from contentcuration.utils.files import get_thumbnail_encoding
 from contentcuration.utils.nodes import migrate_extra_fields
+from contentcuration.utils.pages import create_page_archive
 from contentcuration.utils.parser import load_json_string
 from contentcuration.utils.sentry import report_exception
 
@@ -455,6 +456,15 @@ class TreeMapper:
                     create_kolibri_assessment_metadata(node, kolibrinode)
             elif node.kind_id == content_kinds.SLIDESHOW:
                 create_slideshow_manifest(node, user_id=self.user_id)
+            elif node.is_page and (
+                node.changed
+                or not node.files.filter(preset_id=format_presets.KPUB_ZIP).exists()
+            ):
+                create_page_archive(
+                    node,
+                    language=node.language_id or self.default_language.lang_code,
+                    user_id=self.user_id,
+                )
 
             # TOPIC nodes need to recurse into children, including UNIT topics
             # that also had their assessments processed above

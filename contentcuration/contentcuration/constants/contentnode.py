@@ -11,3 +11,7 @@ kind_activity_map = {
     content_kinds.H5P: learning_activities.EXPLORE,
     content_kinds.SLIDESHOW: learning_activities.READ,
 }
+
+# The extra_fields key holding a page's Markdown. A document node with it is a page,
+# written in Studio's editor rather than uploaded.
+PAGE_MARKDOWN = "page_markdown"
