@@ -1,5 +1,8 @@
 const esLintConfig = require('kolibri-format/.eslintrc');
 
+// Use only this config, not any from folders Studio is checked out inside
+esLintConfig.root = true;
+
 esLintConfig.globals = {
   $: false,
   _: false,

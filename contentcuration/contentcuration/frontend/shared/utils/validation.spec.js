@@ -26,6 +26,7 @@ import {
 } from 'shared/views/QTIEditor/utils/testingFixtures';
 import { MasteryModelsNames } from 'shared/leUtils/MasteryModels';
 import { ContentKindsNames } from 'shared/leUtils/ContentKinds';
+import { PAGE_MARKDOWN } from 'shared/utils/pages';
 
 function generateMasteryExtraFields(mastery) {
   return {
@@ -484,6 +485,26 @@ describe('channelEdit utils', () => {
           },
         };
         expect(isNodeComplete({ nodeDetails: details, assessmentItems })).toBe(true);
+      });
+    });
+
+    describe('for a page', () => {
+      function page(markdown) {
+        return {
+          title: 'Solving equations',
+          license: { id: 8 },
+          kind: ContentKindsNames.DOCUMENT,
+          learning_activities: { test: true },
+          extra_fields: { [PAGE_MARKDOWN]: markdown },
+        };
+      }
+
+      it('returns true with content, without a file', () => {
+        expect(isNodeComplete({ nodeDetails: page('# Solving equations'), files: [] })).toBe(true);
+      });
+
+      it('returns false without content', () => {
+        expect(isNodeComplete({ nodeDetails: page(' \n'), files: [] })).toBe(false);
       });
     });
 

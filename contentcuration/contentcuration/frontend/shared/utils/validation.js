@@ -7,6 +7,7 @@ import Licenses from 'shared/leUtils/Licenses';
 import { MasteryModelsNames } from 'shared/leUtils/MasteryModels';
 import { ContentKindsNames } from 'shared/leUtils/ContentKinds';
 import { validate as validateCompletionCriteria } from 'shared/leUtils/CompletionCriteria';
+import { isPage, pageIsEmpty } from 'shared/utils/pages';
 
 /**
  * Topic and resource
@@ -20,10 +21,14 @@ import { validate as validateCompletionCriteria } from 'shared/leUtils/Completio
  *   Copyright holder is required for non-public domain licenses
  *   License description is required on special permissions licenses
  *
- * Resource other than exercise
- * ----------------------------
+ * Resource other than exercise or page
+ * ------------------------------------
  * All files need to be valid
  * Must have a primary file
+ *
+ * Page
+ * ----
+ * Must have content
  *
  * Exercise
  * --------
@@ -60,7 +65,12 @@ export function isNodeComplete({ nodeDetails, assessmentItems, files }) {
     }
     return false;
   }
-  if (
+  if (isPage(nodeDetails)) {
+    // Publishing makes a page's file from its content
+    if (pageIsEmpty(nodeDetails)) {
+      return false;
+    }
+  } else if (
     nodeDetails.kind !== ContentKindsNames.TOPIC &&
     nodeDetails.kind !== ContentKindsNames.EXERCISE
   ) {

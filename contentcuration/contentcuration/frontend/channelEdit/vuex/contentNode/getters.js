@@ -6,6 +6,7 @@ import uniqBy from 'lodash/uniqBy';
 import messages from '../../translator';
 import { parseNode } from './utils';
 import { getNodeDetailsErrors, getNodeFilesErrors } from 'shared/utils/validation';
+import { isPage, pageIsEmpty } from 'shared/utils/pages';
 import { ContentKindsNames } from 'shared/leUtils/ContentKinds';
 import { NEW_OBJECT, ValidationErrors } from 'shared/constants';
 import { COPYING_STATUS, COPYING_STATUS_VALUES } from 'shared/data/constants';
@@ -144,6 +145,7 @@ export function getContentNodeIsValid(state, getters, rootState, rootGetters) {
       (contentNode[NEW_OBJECT] ||
         (getContentNodeDetailsAreValid(state)(contentNodeId) &&
           getContentNodeFilesAreValid(state, getters, rootState, rootGetters)(contentNodeId) &&
+          !(isPage(contentNode) && pageIsEmpty(contentNode)) &&
           rootGetters['assessmentItem/getAssessmentItemsAreValid']({ contentNodeId })))
     );
   };
@@ -176,7 +178,9 @@ export function getContentNodeFilesAreValid(state, getters, rootState, rootGette
     const contentNode = state.contentNodesMap[contentNodeId];
     if (
       contentNode.kind === ContentKindsNames.TOPIC ||
-      contentNode.kind === ContentKindsNames.EXERCISE
+      contentNode.kind === ContentKindsNames.EXERCISE ||
+      // Publishing makes a page's file from its content
+      isPage(contentNode)
     ) {
       return true;
     }

@@ -15,6 +15,7 @@ import { ContentKindsNames } from 'shared/leUtils/ContentKinds';
 import { findLicense, getMergedMapFields } from 'shared/utils/helpers';
 import { RolesNames } from 'shared/leUtils/Roles';
 import { isNodeComplete } from 'shared/utils/validation';
+import { PAGE_MARKDOWN } from 'shared/utils/pages';
 import * as publicApi from 'shared/data/public';
 
 import db from 'shared/data/db';
@@ -332,6 +333,9 @@ function generateContentNodeData({
     }
     if (extra_fields.inherited_metadata) {
       contentNodeData.extra_fields.inherited_metadata = { ...extra_fields.inherited_metadata };
+    }
+    if (typeof extra_fields[PAGE_MARKDOWN] === 'string') {
+      contentNodeData.extra_fields[PAGE_MARKDOWN] = extra_fields[PAGE_MARKDOWN];
     }
   }
   if (prerequisite !== NOVALUE) {
