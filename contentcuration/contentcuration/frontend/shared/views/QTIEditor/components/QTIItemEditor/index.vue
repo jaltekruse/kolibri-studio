@@ -54,8 +54,16 @@
     </div>
 
     <div class="question-card-body">
+      <slot
+        v-if="otherItemType"
+        name="otherItem"
+        :item="item"
+        :mode="mode"
+        :showAnswers="showAnswers"
+        :update="rawData => $emit('update:rawData', rawData)"
+      ></slot>
       <p
-        v-if="isUnsupported"
+        v-else-if="isUnsupported"
         :style="{ color: $themeTokens.annotation, margin: 0, fontStyle: 'italic' }"
         data-testid="unsupportedMessage"
       >
@@ -174,9 +182,11 @@
 
       /**
        * Items authored outside this editor (e.g. Perseus questions) and QTI it cannot edit
-       * faithfully are shown as read-only cards.
+       * faithfully are shown as read-only cards, unless the consumer edits their type.
        */
-      const isUnsupported = computed(() => !isQti.value || !isEditableQti.value);
+      const isUnsupported = computed(
+        () => !props.otherItemType && (!isQti.value || !isEditableQti.value),
+      );
 
       /*
        * Seed the editor refs from the parsed item's first block, which for an inline
@@ -207,6 +217,7 @@
       const currentQuestionType = ref(null);
 
       const interactionTypeLabel = computed(() => {
+        if (props.otherItemType) return props.otherItemType.label;
         const type = currentQuestionType.value;
         if (!type) return unknownTypeLabel$();
         const QUESTION_TYPE_LABELS = {
@@ -346,6 +357,10 @@
        * Whether the question is missing something an author still has to supply.
        */
       const isIncomplete = computed(() => {
+        // The consumer that edits it knows what it needs
+        if (props.otherItemType) {
+          return false;
+        }
         if (isUnsupported.value) {
           return isUnfixable.value;
         }
@@ -436,6 +451,14 @@
       language: {
         type: String,
         default: '',
+      },
+      /**
+       * When the item is of a type other than QTI that the consumer edits, in the
+       * `otherItem` slot, that type's { label, newLabel, newRawData } (see QTIEditor).
+       */
+      otherItemType: {
+        type: Object,
+        default: null,
       },
     },
 

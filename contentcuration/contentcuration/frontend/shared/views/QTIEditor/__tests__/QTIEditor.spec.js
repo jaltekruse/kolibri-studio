@@ -20,6 +20,7 @@ const {
   closeBtnLabel$,
   unsupportedItemMessage$,
   deleteUnsupportedItemMessage$,
+  questionNumberAndTypeLabel$,
 } = qtiEditorStrings;
 
 const QTI_ITEM = {
@@ -107,5 +108,76 @@ describe('QTIEditor', () => {
       expect(message).not.toHaveTextContent(unsupportedItemMessage$());
       expect(editButton()).toBeDisabled();
     });
+  });
+});
+
+describe('QTIEditor with another item type', () => {
+  const OTHER_TYPE = 'perseus_question';
+  const OTHER_ITEM = { assessment_id: 'other-item', type: OTHER_TYPE, raw_data: '{"q":1}' };
+  const otherItemTypes = {
+    [OTHER_TYPE]: {
+      label: 'Other question',
+      newLabel: 'New other question',
+      newRawData: () => '{"q":0}',
+    },
+  };
+
+  // The consumer's editor: shows the mode it was given, and saves new raw_data when clicked
+  function otherItem({ item, mode, update }) {
+    return this.$createElement(
+      'button',
+      {
+        attrs: { 'data-testid': `other-editor-${item.assessment_id}` },
+        on: { click: () => update('{"q":2}') },
+      },
+      mode,
+    );
+  }
+
+  const renderWithOtherType = assessments =>
+    render(QTIEditor, {
+      props: { assessments, otherItemTypes },
+      scopedSlots: { otherItem },
+      routes: new VueRouter(),
+    });
+
+  test("shows its items in the consumer's editor, labelled with their type", () => {
+    renderWithOtherType([OTHER_ITEM]);
+
+    expect(screen.getByTestId('other-editor-other-item')).toHaveTextContent('view');
+    expect(screen.queryByTestId('unsupportedMessage')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {
+        name: questionNumberAndTypeLabel$({ number: 1, total: 1, type: 'Other question' }),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  test('opens its items for editing', async () => {
+    renderWithOtherType([OTHER_ITEM]);
+
+    await fireEvent.click(editButton());
+
+    expect(screen.getByTestId('other-editor-other-item')).toHaveTextContent('edit');
+  });
+
+  test("saves what the consumer's editor gives it", async () => {
+    const { emitted } = renderWithOtherType([QTI_ITEM, OTHER_ITEM]);
+
+    await fireEvent.click(screen.getByTestId('other-editor-other-item'));
+
+    expect(emitted().update.at(-1)[0]).toEqual([QTI_ITEM, { ...OTHER_ITEM, raw_data: '{"q":2}' }]);
+  });
+
+  test('adds a new item of the type, open', async () => {
+    const { emitted, updateProps } = renderWithOtherType([QTI_ITEM]);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'New other question' }));
+    const [assessments] = emitted().update.at(-1);
+    await updateProps({ assessments });
+
+    const added = assessments[1];
+    expect(added).toMatchObject({ type: OTHER_TYPE, raw_data: '{"q":0}' });
+    expect(screen.getByTestId(`other-editor-${added.assessment_id}`)).toHaveTextContent('edit');
   });
 });

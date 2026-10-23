@@ -29,6 +29,7 @@
           :allowFreeResponse="allowFreeResponse"
           :language="language"
           :showAnswers="showAnswers"
+          :otherItemType="otherItemTypes[item.type]"
           canDelete
           data-testid="item"
           @open="openItem(item.assessment_id)"
@@ -41,6 +42,12 @@
               :actions="getToolbarActions(item, idx, { canOpen })"
               data-testid="toolbar"
             />
+          </template>
+          <template #otherItem="slotProps">
+            <slot
+              name="otherItem"
+              v-bind="slotProps"
+            ></slot>
           </template>
         </QTIItemEditor>
       </div>
@@ -55,6 +62,13 @@
       style="margin-top: 16px; margin-left: 0"
       data-testid="newQuestionBtn"
       @click="addItem()"
+    />
+    <KButton
+      v-for="(itemType, type) in otherItemTypes"
+      :key="type"
+      :text="itemType.newLabel"
+      style="margin-top: 16px"
+      @click="addItem({ type })"
     />
   </div>
 
@@ -78,8 +92,14 @@
     return uuidv4().replace(/-/g, '');
   }
 
-  /** Creates a blank item with a stable UUID and the default interaction type. */
-  function createBlankItem() {
+  /**
+   * Creates a blank item with a stable UUID: of the default interaction type, or of one of
+   * the other item types.
+   */
+  function createBlankItem(type, otherItemTypes) {
+    if (type && type !== AssessmentItemTypes.QTI) {
+      return { assessment_id: uuid4(), type, raw_data: otherItemTypes[type].newRawData() };
+    }
     return {
       assessment_id: uuid4(),
       type: AssessmentItemTypes.QTI,
@@ -132,9 +152,10 @@
        * Add a blank item.
        * @param {Object} [opts]
        * @param {number} [opts.atIndex] splice position; defaults to end of list
+       * @param {string} [opts.type] one of otherItemTypes; defaults to QTI
        */
-      function addItem({ atIndex } = {}) {
-        const newItem = createBlankItem();
+      function addItem({ atIndex, type } = {}) {
+        const newItem = createBlankItem(type, props.otherItemTypes);
         const list = [...props.assessments];
         const pos = atIndex !== undefined ? atIndex : list.length;
         list.splice(pos, 0, newItem);
@@ -233,6 +254,17 @@
       language: {
         type: String,
         default: '',
+      },
+      /**
+       * Item types other than QTI that the consumer edits, in the `otherItem` slot, by
+       * their AssessmentItemType: { label, newLabel, newRawData }, where label names the
+       * type, newLabel labels the button that adds one, and newRawData returns a blank
+       * one's raw_data. The slot gets { item, mode, showAnswers, update }, and calls
+       * update with the item's new raw_data.
+       */
+      otherItemTypes: {
+        type: Object,
+        default: () => ({}),
       },
     },
 
