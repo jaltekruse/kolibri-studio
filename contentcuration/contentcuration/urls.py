@@ -371,6 +371,7 @@ urlpatterns += i18n_patterns(
         name="staging_redirect",
     ),
     re_path(r"^channels/(?P<channel_id>[^/]{32})/$", views.channel, name="channel"),
+    re_path(r"^perseus-preview/$", views.perseus_preview, name="perseus_preview"),
     re_path(r"^accounts/login/$", registration_views.login, name="login"),
     re_path(r"^accounts/logout/$", registration_views.logout, name="logout"),
     re_path(

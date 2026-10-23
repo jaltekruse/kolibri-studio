@@ -86,6 +86,8 @@ Thumbs.db
 # Ignore javascript bundle output dirs
 /contentcuration/contentcuration/static/js/bundles
 /contentcuration/contentcuration/static/studio
+# MathJax's fonts, copied in by webpack.config.js
+/contentcuration/contentcuration/static/mathjax
 
 # Ignore Django collectstatic output dir
 /contentcuration/static/*

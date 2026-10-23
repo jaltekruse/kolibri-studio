@@ -1,5 +1,6 @@
 /* eslint-env node */
 
+const fs = require('node:fs');
 const path = require('node:path');
 
 const baseConfig = require('kolibri-build/src/webpack.config.base');
@@ -27,7 +28,23 @@ const srcDir = path.resolve(djangoProjectDir, 'contentcuration', 'frontend');
 
 const bundleOutputDir = path.resolve(staticFilesDir, 'studio');
 
+// Perseus's math is rendered with MathJax, which loads its fonts from a folder:
+// copy them where Django serves them, at /static/mathjax/fonts.
+function copyMathjaxFonts() {
+  const rendererDir = path.dirname(require.resolve('@khanacademy/mathjax-renderer/package.json'));
+  const mathjaxDir = path.dirname(
+    require.resolve('mathjax-full/package.json', { paths: [rendererDir] }),
+  );
+  const source = path.join(mathjaxDir, 'ts', 'output', 'chtml', 'fonts', 'tex-woff-v2');
+  const target = path.resolve(staticFilesDir, 'mathjax', 'fonts');
+  fs.mkdirSync(target, { recursive: true });
+  for (const file of fs.readdirSync(source)) {
+    fs.copyFileSync(path.join(source, file), path.join(target, file));
+  }
+}
+
 module.exports = (env = {}) => {
+  copyMathjaxFonts();
   const dev = env.dev;
   const hot = env.hot;
   const base = baseConfig({ mode: dev ? 'development' : 'production', hot, cache: dev, transpile: !dev });
@@ -83,6 +100,8 @@ module.exports = (env = {}) => {
       settings: ['./shared/rtlcss-stub.js', './settings/index.js'],
       accounts: ['./shared/rtlcss-stub.js', './accounts/index.js'],
       administration: ['./shared/rtlcss-stub.js', './administration/index.js'],
+      // The page Khan Academy's question editor previews questions in
+      perseus_preview: ['./shared/rtlcss-stub.js', './perseusPreview/index.js'],
       // A simple code sandbox to play with components in
       pdfJSWorker: ['pdfjs-dist/build/pdf.worker.entry.js'],
       // Utility for taking screenshots inside an iframe sandbox

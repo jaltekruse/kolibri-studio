@@ -22,6 +22,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import check_for_language
 from django.utils.translation import get_language
 from django.utils.translation import LANGUAGE_SESSION_KEY
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 from django.views.i18n import LANGUAGE_QUERY_PARAMETER
 from django_celery_results.models import TaskResult
@@ -314,6 +315,15 @@ def accounts(request):
             MESSAGES: json_for_parse_from_data(get_messages()),
         },
     )
+
+
+@xframe_options_sameorigin
+def perseus_preview(request):
+    """
+    The page Khan Academy's question editor shows its previews in, in frames on
+    Studio's own pages. It shows what the editor gives it, and has no data of its own.
+    """
+    return render(request, "perseus_preview.html")
 
 
 @login_required

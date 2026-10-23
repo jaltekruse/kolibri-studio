@@ -1,0 +1,15 @@
+<!DOCTYPE HTML>
+{% load render_bundle from webpack_loader %}
+{% load render_bundle_css from translation_tags %}
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Question preview</title>
+    {% render_bundle_css 'perseus_preview' %}
+  </head>
+  <body>
+    <div id="perseus-preview"></div>
+    {% render_bundle 'perseus_preview' 'js' %}
+  </body>
+</html>

@@ -20,8 +20,19 @@
       :assessments="assessmentItems"
       :allowFreeResponse="allowFreeResponse"
       :language="language"
+      :otherItemTypes="otherItemTypes"
       @update="applyUpdate"
-    />
+    >
+      <template #otherItem="{ item, mode, showAnswers, update }">
+        <PerseusEditor
+          :rawData="item.raw_data"
+          :itemId="item.assessment_id"
+          :mode="mode"
+          :showAnswers="showAnswers"
+          @update:rawData="update"
+        />
+      </template>
+    </QTIEditor>
   </div>
 
 </template>
@@ -34,11 +45,16 @@
 
   import useAssessmentItems from '../../composables/useAssessmentItems';
   import QTIEditor from 'shared/views/QTIEditor/index';
+  import PerseusEditor from 'shared/views/PerseusEditor/index';
+  import { blankPerseusRawData } from 'shared/views/PerseusEditor/item';
+  import { perseusEditorStrings } from 'shared/views/PerseusEditor/perseusEditorStrings';
+  import { AssessmentItemTypes } from 'shared/constants';
 
   export default {
     name: 'AssessmentTab',
     components: {
       QTIEditor,
+      PerseusEditor,
     },
     setup(props) {
       const { nodeId } = toRefs(props);
@@ -50,7 +66,18 @@
         windowIsSmall.value ? {} : { maxWidth: '1200px', margin: '0 auto' },
       );
 
+      // Questions written with Khan Academy's question editor, Perseus
+      const { khanAcademyQuestion$, newKhanAcademyQuestion$ } = perseusEditorStrings;
+      const otherItemTypes = {
+        [AssessmentItemTypes.PERSEUS_QUESTION]: {
+          label: khanAcademyQuestion$(),
+          newLabel: newKhanAcademyQuestion$(),
+          newRawData: blankPerseusRawData,
+        },
+      };
+
       return {
+        otherItemTypes,
         assessmentItems,
         invalidItemsCount,
         allowFreeResponse,
