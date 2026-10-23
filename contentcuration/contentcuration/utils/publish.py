@@ -61,6 +61,7 @@ from contentcuration.utils.nodes import migrate_extra_fields
 from contentcuration.utils.pages import create_page_archive
 from contentcuration.utils.parser import load_json_string
 from contentcuration.utils.sentry import report_exception
+from contentcuration.utils.youtube import get_youtube_id
 
 
 logmodule.basicConfig()
@@ -536,6 +537,11 @@ def create_bare_contentnode(  # noqa: C901
     options = {}
     if ccnode.extra_fields and "options" in ccnode.extra_fields:
         options = ccnode.extra_fields["options"]
+    if ccnode.kind_id == content_kinds.VIDEO:
+        youtube_id = get_youtube_id(ccnode)
+        if youtube_id:
+            # So Kolibri can play the video from YouTube
+            options = {**options, "youtube_id": youtube_id}
 
     duration = None
     ccnode_completion_criteria = options.get("completion_criteria")
