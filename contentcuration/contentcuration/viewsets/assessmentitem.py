@@ -75,6 +75,34 @@ def get_filenames_from_qti_item(assessment_item):
     return get_qti_media_references(assessment_item.raw_data)
 
 
+# A Perseus question's images, at ${☣ CONTENTSTORAGE}/<checksum>.<ext> in its JSON.
+# Its graphie images are referenced by other names, and kept as they are.
+perseus_image_filename_regex = re.compile(
+    re.escape("${}/".format(exercises.CONTENT_STORAGE_PLACEHOLDER))
+    + r"([a-f0-9]{32}\.[0-9a-z]+)"
+)
+
+
+def get_filenames_from_perseus_item(assessment_item):
+    return set(perseus_image_filename_regex.findall(assessment_item.raw_data or ""))
+
+
+def is_perseus_item(raw_data):
+    try:
+        item = json.loads(raw_data)
+    except ValueError:
+        return False
+    return (
+        isinstance(item, dict)
+        and isinstance(item.get("question"), dict)
+        and isinstance(item.get("hints", []), list)
+    )
+
+
+# The item types whose raw_data references their files
+RAW_DATA_FILE_TYPES = (exercises.QTI, exercises.PERSEUS_QUESTION)
+
+
 class AssessmentListSerializer(BulkListSerializer):
     def create(self, all_validated_data):
         with transaction.atomic():
@@ -168,7 +196,12 @@ class AssessmentItemSerializer(BulkModelSerializer):
                 raise ValidationError(
                     {"raw_data": [error.message for error in result.errors]}
                 )
-        elif item_type != exercises.PERSEUS_QUESTION and "raw_data" in data:
+        elif item_type == exercises.PERSEUS_QUESTION:
+            if "raw_data" in data and not is_perseus_item(data["raw_data"]):
+                raise ValidationError(
+                    {"raw_data": ["This field must be the JSON of a Perseus item."]}
+                )
+        elif "raw_data" in data:
             raise ValidationError(
                 {
                     "raw_data": [
@@ -208,7 +241,8 @@ class AssessmentItemSerializer(BulkModelSerializer):
         if all_validated_data:
             # If this is an update operation, check the validated data for which items
             # have had these fields modified. raw_data only carries file references for
-            # QTI items, so a raw_data-only change only counts as "modified" for those.
+            # QTI and Perseus items, so a raw_data-only change only counts as "modified"
+            # for those.
             item_types_by_lookup = {
                 self.id_value_lookup(ai): ai.type for ai in all_objects
             }
@@ -221,7 +255,7 @@ class AssessmentItemSerializer(BulkModelSerializer):
                 or (
                     "raw_data" in ai
                     and item_types_by_lookup.get(self.id_value_lookup(ai))
-                    == exercises.QTI
+                    in RAW_DATA_FILE_TYPES
                 )
             }
         else:
@@ -232,7 +266,7 @@ class AssessmentItemSerializer(BulkModelSerializer):
                 if ai.question
                 or ai.hints
                 or ai.answers
-                or (ai.type == exercises.QTI and ai.raw_data)
+                or (ai.type in RAW_DATA_FILE_TYPES and ai.raw_data)
             }
 
         all_objects = [
@@ -248,11 +282,18 @@ class AssessmentItemSerializer(BulkModelSerializer):
 
         for aitem in all_objects:
             current_files = current_files_by_aitem.get(aitem.id, [])
-            filenames = (
-                get_filenames_from_qti_item(aitem)
-                if aitem.type == exercises.QTI
-                else get_filenames_from_assessment(aitem)
-            )
+            if aitem.type == exercises.QTI:
+                filenames = get_filenames_from_qti_item(aitem)
+            elif aitem.type == exercises.PERSEUS_QUESTION:
+                filenames = get_filenames_from_perseus_item(aitem)
+                # Its graphie files aren't referenced by checksum
+                current_files = [
+                    f
+                    for f in current_files
+                    if f.preset_id == format_presets.EXERCISE_IMAGE
+                ]
+            else:
+                filenames = get_filenames_from_assessment(aitem)
             set_checksums = {filename.split(".")[0] for filename in filenames}
             current_checksums = {f.checksum for f in current_files}
 
