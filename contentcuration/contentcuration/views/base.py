@@ -333,7 +333,7 @@ def perseus_preview(request):
     return render(request, "perseus_preview.html")
 
 
-GRAPHIE_PARTS = {".svg": ("image/svg+xml", 0), "-data.json": ("application/json", 1)}
+_GRAPHIE_PARTS = {".svg": ("image/svg+xml", 0), "-data.json": ("application/json", 1)}
 
 
 @require_GET
@@ -353,7 +353,7 @@ def perseus_graphie(request, name, suffix):
         raise Http404
     with default_storage.open(graphie.file_on_disk.name, "rb") as f:
         parts = f.read().split(exercises.GRAPHIE_DELIMITER.encode("ascii"))
-    content_type, index = GRAPHIE_PARTS[suffix]
+    content_type, index = _GRAPHIE_PARTS[suffix]
     response = HttpResponse(parts[index], content_type=content_type)
     # Opened on its own, an svg could run scripts as Studio
     response[
