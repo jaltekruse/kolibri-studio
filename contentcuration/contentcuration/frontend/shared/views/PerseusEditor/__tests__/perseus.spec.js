@@ -28,6 +28,22 @@ function editItem(content) {
   return { shown, onChange };
 }
 
+function viewItem(question) {
+  const element = document.createElement('div');
+  document.body.appendChild(element);
+  let shown;
+  act(() => {
+    shown = mountPerseusItem(element, {
+      mode: 'view',
+      revision: 1,
+      item: migratePerseusItem({ question, answerArea: {}, hints: [] }),
+      itemId: 'item-1',
+      showAnswers: false,
+    });
+  });
+  return shown;
+}
+
 describe('Perseus editor', () => {
   beforeAll(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -55,5 +71,66 @@ describe('Perseus editor', () => {
     expect(() => act(() => jest.runOnlyPendingTimers())).not.toThrow();
     expect(screen.getByPlaceholderText('answer')).toBeInTheDocument();
     act(() => shown.unmount());
+  });
+
+  describe('with a graphie imported with the question', () => {
+    const LABELS = {
+      range: [
+        [0, 10],
+        [0, 10],
+      ],
+      labels: [{ content: 'Label A', coordinates: [5, 5], typesetAsMath: false }],
+    };
+
+    const { Image } = window;
+
+    beforeEach(() => {
+      global.fetch = jest.fn(async () => ({ ok: true, text: async () => JSON.stringify(LABELS) }));
+      // jsdom loads no images; these load as soon as they are given a source
+      window.Image = class {
+        set src(src) {
+          Promise.resolve().then(() => this.onload?.());
+        }
+      };
+    });
+
+    afterEach(() => {
+      delete global.fetch;
+      window.Image = Image;
+    });
+
+    it('loads its picture and labels from Studio', async () => {
+      const shown = viewItem({
+        content: '[[☃ image 1]]',
+        images: {},
+        widgets: {
+          'image 1': {
+            type: 'image',
+            options: {
+              alt: 'A graph',
+              backgroundImage: {
+                url: 'web+graphie:${☣ CONTENTSTORAGE}/abc123',
+                width: 300,
+                height: 300,
+              },
+            },
+          },
+        },
+      });
+      for (let tick = 0; tick < 5; tick++) {
+        await act(async () => {
+          jest.runOnlyPendingTimers();
+          await Promise.resolve();
+        });
+      }
+
+      expect(global.fetch).toHaveBeenCalledWith('/perseus-graphie/abc123-data.json');
+      expect(screen.getByRole('img', { name: 'A graph' })).toHaveAttribute(
+        'src',
+        '/perseus-graphie/abc123.svg',
+      );
+      expect(screen.getByText('Label A')).toBeInTheDocument();
+      act(() => shown.unmount());
+    });
   });
 });

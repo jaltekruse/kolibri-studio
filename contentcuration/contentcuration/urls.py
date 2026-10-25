@@ -354,6 +354,15 @@ urlpatterns += [
     re_path(r"^jsreverse/$", django_js_reverse_views.urls_js, name="js_reverse")
 ]
 
+# Graphies in Perseus questions, where Khan Academy's question editor loads them
+urlpatterns += [
+    re_path(
+        r"^perseus-graphie/(?P<name>[\w-]+?)(?P<suffix>\.svg|-data\.json)$",
+        views.perseus_graphie,
+        name="perseus_graphie",
+    ),
+]
+
 # I18N Endpoints
 urlpatterns += [
     re_path(r"^i18n/", include("django.conf.urls.i18n")),

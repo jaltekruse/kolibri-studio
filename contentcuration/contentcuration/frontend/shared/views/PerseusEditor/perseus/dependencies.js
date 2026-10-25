@@ -29,6 +29,26 @@ const log = {
 };
 /* eslint-enable no-console */
 
+// A question refers to a graphie imported with it, an svg with label data, as
+// web+graphie:${☣ CONTENTSTORAGE}/<name>, and Studio serves its parts
+const STORED_GRAPHIE = /^web\+graphie:\$\{☣ CONTENTSTORAGE\}\//;
+const GRAPHIE_PATH = '/perseus-graphie/';
+
+/**
+ * Have Perseus load stored graphies from Studio, and other graphies as before.
+ * @param {object} Util - Perseus's Util, whose URLs its image components read
+ */
+function loadStoredGraphiesFromStudio(Util) {
+  const { getSvgUrl, getDataUrl, getRealImageUrl } = Util;
+  const partUrl = (url, suffix) => url.replace(STORED_GRAPHIE, GRAPHIE_PATH) + suffix;
+  Object.assign(Util, {
+    getSvgUrl: url => (STORED_GRAPHIE.test(url) ? partUrl(url, '.svg') : getSvgUrl(url)),
+    getDataUrl: url => (STORED_GRAPHIE.test(url) ? partUrl(url, '-data.json') : getDataUrl(url)),
+    getRealImageUrl: url =>
+      STORED_GRAPHIE.test(url) ? partUrl(url, '.svg') : getRealImageUrl(url),
+  });
+}
+
 let initialized = false;
 
 /**
@@ -49,6 +69,7 @@ export function initPerseus() {
     Log: log,
   });
   perseus.init();
+  loadStoredGraphiesFromStudio(perseus.Util);
   initialized = true;
 }
 

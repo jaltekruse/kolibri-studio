@@ -4,12 +4,14 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
+from django.core.files.storage import default_storage
 from django.db.models import Count
 from django.db.models import IntegerField
 from django.db.models import OuterRef
 from django.db.models import Subquery
 from django.db.models import UUIDField
 from django.db.models.functions import Cast
+from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseForbidden
 from django.shortcuts import redirect
@@ -22,11 +24,15 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import check_for_language
 from django.utils.translation import get_language
 from django.utils.translation import LANGUAGE_SESSION_KEY
+from django.views.decorators.cache import cache_control
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 from django.views.i18n import LANGUAGE_QUERY_PARAMETER
 from django_celery_results.models import TaskResult
 from django_cte import With
+from le_utils.constants import exercises
+from le_utils.constants import format_presets
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.authentication import TokenAuthentication
@@ -46,6 +52,7 @@ from contentcuration.models import ChannelHistory
 from contentcuration.models import ContentKind
 from contentcuration.models import CustomTaskMetadata
 from contentcuration.models import DEFAULT_USER_PREFERENCES
+from contentcuration.models import File
 from contentcuration.models import Language
 from contentcuration.models import License
 from contentcuration.serializers import SimplifiedChannelProbeCheckSerializer
@@ -324,6 +331,36 @@ def perseus_preview(request):
     Studio's own pages. It shows what the editor gives it, and has no data of its own.
     """
     return render(request, "perseus_preview.html")
+
+
+GRAPHIE_PARTS = {".svg": ("image/svg+xml", 0), "-data.json": ("application/json", 1)}
+
+
+@require_GET
+@cache_control(private=True, max_age=86400)
+def perseus_graphie(request, name, suffix):
+    """
+    The svg or label data of a graphie that Perseus questions refer to as
+    web+graphie:${☣ CONTENTSTORAGE}/<name>. Studio keeps both in one file.
+    """
+    graphie = File.filter_view_queryset(
+        File.objects.filter(
+            preset_id=format_presets.EXERCISE_GRAPHIE, original_filename=name
+        ),
+        request.user,
+    ).first()
+    if graphie is None:
+        raise Http404
+    with default_storage.open(graphie.file_on_disk.name, "rb") as f:
+        parts = f.read().split(exercises.GRAPHIE_DELIMITER.encode("ascii"))
+    content_type, index = GRAPHIE_PARTS[suffix]
+    response = HttpResponse(parts[index], content_type=content_type)
+    # Opened on its own, an svg could run scripts as Studio
+    response[
+        "Content-Security-Policy"
+    ] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @login_required

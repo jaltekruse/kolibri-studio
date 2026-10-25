@@ -329,6 +329,153 @@ def retrieve_license(cursor, license_id):
     return models.License.objects.get(license_name=name), description
 
 
+# Metadata label fields, stored comma separated in a channel database
+_LABEL_FIELDS = (
+    "grade_levels",
+    "resource_types",
+    "learning_activities",
+    "accessibility_labels",
+    "categories",
+    "learner_needs",
+)
+_MEDIA_PRESETS = (
+    format_presets.VIDEO_HIGH_RES,
+    format_presets.VIDEO_LOW_RES,
+    format_presets.AUDIO,
+)
+# Publishing makes these again from the questions
+_EXERCISE_ARCHIVE_PRESETS = (format_presets.EXERCISE, format_presets.QTI_ZIP)
+
+
+def import_topic(source_channel_id, topic_id, editor, download_url=None, database=None):
+    """
+    Copy a topic of a published channel into a new channel the editor can edit,
+    with Perseus questions kept as Perseus questions.
+
+    The copies get new node ids, so Kolibri can hold them beside the published
+    channel, and keep their content ids, so a learner's progress on one counts
+    on the other.
+
+    :param source_channel_id: The id of the published channel.
+    :param topic_id: The id of the topic in that channel.
+    :param editor: The email address of the user to make the channel's editor.
+    :param download_url: The Studio to download the channel database and files from.
+    :param database: A local copy of the channel database, read instead of downloading it.
+    :returns: The new channel.
+    """
+    editor = models.User.objects.get(email=editor)
+    with _channel_database(source_channel_id, download_url, database) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        topic = cursor.execute(
+            f"SELECT title, description, lang_id FROM {NODE_TABLE} "
+            "WHERE id=? AND kind=?",
+            (topic_id, content_kinds.TOPIC),
+        ).fetchone()
+        if topic is None:
+            raise ValueError(f"Channel {source_channel_id} has no topic {topic_id}")
+        with transaction.atomic():
+            channel = models.Channel.objects.create(
+                name=topic["title"],
+                description=(topic["description"] or "")[:400],
+                language=models.Language.objects.filter(pk=topic["lang_id"]).first(),
+                actor_id=editor.id,
+            )
+            channel.editors.add(editor)
+            _copy_nodes(
+                cursor, topic_id, channel.main_tree, source_channel_id, download_url
+            )
+    return channel
+
+
+@contextmanager
+def _channel_database(channel_id, download_url, database):
+    if database:
+        conn = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        try:
+            yield conn
+        finally:
+            conn.close()
+        return
+    if not download_url:
+        raise ValueError("Give a database or a URL to download it from")
+    with tempfile.NamedTemporaryFile(suffix=".sqlite3") as tempf:
+        response = requests.get(
+            f"{download_url}/content/databases/{channel_id}.sqlite3", stream=True
+        )
+        response.raise_for_status()
+        for chunk in response.iter_content(chunk_size=1024 * 1024):
+            tempf.write(chunk)
+        tempf.flush()
+        conn = sqlite3.connect(tempf.name)
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+
+def _copy_nodes(cursor, source_parent_id, parent, source_channel_id, download_url):
+    rows = cursor.execute(
+        "SELECT id, title, content_id, description, sort_order, license_owner, "
+        "author, license_id, kind, coach_content, lang_id, duration, options, "
+        f"{', '.join(_LABEL_FIELDS)} FROM {NODE_TABLE} "
+        "WHERE parent_id=? ORDER BY sort_order",
+        (source_parent_id,),
+    ).fetchall()
+    for row in rows:
+        log.info(f"{row['id']} ({row['title']} - {row['kind']})...")
+        license = retrieve_license(cursor, row["license_id"])
+        options = json.loads(row["options"] or "{}")
+        extra_fields = {"options": options} if options else {}
+        randomize = cursor.execute(
+            f"SELECT randomize FROM {ASSESSMENTMETADATA_TABLE} WHERE contentnode_id=?",
+            (row["id"],),
+        ).fetchone()
+        if randomize:
+            extra_fields["randomize"] = bool(randomize["randomize"])
+        node = models.ContentNode.objects.create(
+            title=row["title"],
+            content_id=row["content_id"],
+            description=row["description"] or "",
+            sort_order=row["sort_order"],
+            copyright_holder=row["license_owner"],
+            author=row["author"] or "",
+            license=license[0] if license else None,
+            license_description=license[1] if license else "",
+            language=models.Language.objects.filter(pk=row["lang_id"]).first(),
+            role_visibility=roles.COACH if row["coach_content"] else roles.LEARNER,
+            extra_fields=extra_fields,
+            kind_id=row["kind"],
+            parent=parent,
+            original_channel_id=source_channel_id,
+            source_channel_id=source_channel_id,
+            original_source_node_id=row["id"],
+            source_node_id=row["id"],
+            **{
+                field: {label: True for label in row[field].split(",")}
+                for field in _LABEL_FIELDS
+                if row[field]
+            },
+        )
+        if row["kind"] == content_kinds.TOPIC:
+            _copy_nodes(cursor, row["id"], node, source_channel_id, download_url)
+        elif row["kind"] == content_kinds.EXERCISE:
+            create_assessment_items(
+                cursor, node, download_url=download_url, source_id=row["id"]
+            )
+        create_files(
+            cursor,
+            node,
+            download_url=download_url,
+            source_id=row["id"],
+            skip_presets=_EXERCISE_ARCHIVE_PRESETS,
+        )
+        # A channel database keeps a video's duration on its node
+        node.files.filter(preset_id__in=_MEDIA_PRESETS).update(duration=row["duration"])
+        node.mark_complete()
+        node.save()
+
+
 def download_file(
     filename,
     download_url=None,
@@ -371,24 +518,30 @@ def download_file(
     file_obj.save()
 
 
-def create_files(cursor, contentnode, indent=0, download_url=None):
+def create_files(
+    cursor, contentnode, indent=0, download_url=None, source_id=None, skip_presets=()
+):
     """create_files: Get license
     Args:
         cursor (sqlite3.Connection): connection to export database
         contentnode (models.ContentNode): node file references
         indent (int): How far to indent print statements
+        source_id (str): id of the node in the export database, if not its node_id
+        skip_presets (tuple): presets of the files not to create
     Returns: None
     """
     # Parse database for files referencing content node and make file models
     sql_command = (
         "SELECT checksum, extension, file_size, contentnode_id, "
         "lang_id, preset FROM {table} WHERE contentnode_id='{id}';".format(
-            table=FILE_TABLE, id=contentnode.node_id
+            table=FILE_TABLE, id=source_id or contentnode.node_id
         )
     )
 
     query = cursor.execute(sql_command).fetchall()
     for checksum, extension, file_size, contentnode_id, lang_id, preset in query:
+        if preset in skip_presets:
+            continue
         filename = "{}.{}".format(checksum, extension)
         log.info(
             "{indent} * FILE {filename}...".format(
@@ -481,7 +634,9 @@ def _download_to_tempfile(filename, download_url):
         os.unlink(tempf.name)
 
 
-def create_assessment_items(cursor, contentnode, indent=0, download_url=None):
+def create_assessment_items(
+    cursor, contentnode, indent=0, download_url=None, source_id=None
+):
     """create_assessment_items: Generate assessment items based on the QTI zip,
     or the perseus zip if the node has no QTI zip
     Args:
@@ -489,6 +644,7 @@ def create_assessment_items(cursor, contentnode, indent=0, download_url=None):
         contentnode (models.ContentNode): node assessment items reference
         indent (int): How far to indent print statements
         download_url (str): Domain to download files from
+        source_id (str): id of the node in the export database, if not its node_id
     Returns: None
     """
 
@@ -497,7 +653,7 @@ def create_assessment_items(cursor, contentnode, indent=0, download_url=None):
         "SELECT checksum, extension, preset FROM {table} "
         "WHERE contentnode_id='{id}' AND preset IN ('{perseus}', '{qti}');".format(
             table=FILE_TABLE,
-            id=contentnode.node_id,
+            id=source_id or contentnode.node_id,
             perseus=format_presets.EXERCISE,
             qti=format_presets.QTI_ZIP,
         )
@@ -536,7 +692,8 @@ def create_assessment_items(cursor, contentnode, indent=0, download_url=None):
             _restore_archive(
                 filename, extract_assessment_items, contentnode, indent, download_url
             )
-        except IOError as e:
+        # KeyError: the archive lists a question it does not hold
+        except (IOError, KeyError) as e:
             log.warning("\b FAILED (check logs for more details)")
             sys.stderr.write(
                 "Restoration Process Error: Failed to save file object {}: {}".format(
@@ -565,7 +722,9 @@ def _extract_qti_items(filepath, contentnode, download_url=None):
             item_xml = zipf.read(resource.href)
             perseus_path = find_perseus_custom_interaction_path(item_xml)
             if perseus_path:
-                _create_perseus_item(zipf, perseus_path, resource, order, contentnode)
+                _create_perseus_item(
+                    zipf, perseus_path, resource.dependency_hrefs, order, contentnode
+                )
             else:
                 _create_qti_item(zipf, item_xml, resource, order, contentnode)
 
@@ -594,12 +753,18 @@ def _create_qti_item(zipf, item_xml, resource, order, contentnode):
         )
 
 
-def _create_perseus_item(zipf, perseus_path, resource, order, contentnode):
+def _create_perseus_item(
+    zipf,
+    perseus_path,
+    dependency_hrefs,
+    order,
+    contentnode,
+    image_dir=QTIExerciseGenerator.PERSEUS_IMAGE_DIR,
+):
     """Restore a packaged Perseus question with its images and graphies (an .svg
     with a sibling -data.json).
     """
-    image_dir = QTIExerciseGenerator.PERSEUS_IMAGE_DIR
-    hrefs = set(resource.dependency_hrefs)
+    hrefs = set(dependency_hrefs)
     graphie_hrefs = {
         href
         for href in hrefs
@@ -608,12 +773,13 @@ def _create_perseus_item(zipf, perseus_path, resource, order, contentnode):
     # Perseus hrefs are relative to the package root.
     image_hrefs = [
         href
-        for href in resource.dependency_hrefs
+        for href in dependency_hrefs
         if href.startswith(f"{image_dir}/")
         and not href.endswith("-data.json")
         and href not in graphie_hrefs
     ]
-    raw_data = zipf.read(perseus_path).decode("utf-8")
+    # The exercise archive's template ends the JSON with a newline.
+    raw_data = zipf.read(perseus_path).decode("utf-8").strip()
     assessment_item = models.AssessmentItem.objects.create(
         contentnode=contentnode,
         assessment_id=os.path.splitext(os.path.basename(perseus_path))[0],
@@ -660,29 +826,56 @@ def extract_assessment_items(filepath, contentnode, download_url=None):
         download_url (str): Domain to download files from
     Returns: None
     """
-
-    try:
-        tempdir = tempfile.mkdtemp()
-        with zipfile.ZipFile(filepath, "r") as zipf:
-            zipf.extractall(tempdir)
-
-        with open(os.path.join(tempdir, "exercise.json"), "rb") as fobj:
-            data = json.load(fobj)
-
+    with zipfile.ZipFile(filepath, "r") as zipf:
+        data = json.loads(zipf.read("exercise.json"))
         for index, assessment_id in enumerate(data["all_assessment_items"]):
-            with open(
-                os.path.join(tempdir, "{}.json".format(assessment_id)), "rb"
-            ) as fobj:
-                assessment_item = generate_assessment_item(
-                    assessment_id,
+            assessment_type = data["assessment_mapping"][assessment_id]
+            item_path = "{}.json".format(assessment_id)
+            if assessment_type == exercises.PERSEUS_QUESTION:
+                _create_perseus_item(
+                    zipf,
+                    item_path,
+                    _perseus_archive_asset_paths(zipf, item_path),
                     index,
-                    data["assessment_mapping"][assessment_id],
-                    json.load(fobj),
-                    download_url=download_url,
+                    contentnode,
+                    image_dir=_PERSEUS_ARCHIVE_IMAGE_DIR,
                 )
-                contentnode.assessment_items.add(assessment_item)
-    finally:
-        shutil.rmtree(tempdir)
+                continue
+            assessment_item = generate_assessment_item(
+                assessment_id,
+                index,
+                assessment_type,
+                json.loads(zipf.read(item_path)),
+                download_url=download_url,
+            )
+            contentnode.assessment_items.add(assessment_item)
+
+
+# Where PerseusExerciseGenerator packages images. Its questions share the one
+# directory, so each question's files are the ones its JSON refers to.
+_PERSEUS_ARCHIVE_IMAGE_DIR = "images"
+_perseus_archive_asset_regex = re.compile(
+    re.escape(f"{exercises.IMG_PLACEHOLDER}/{_PERSEUS_ARCHIVE_IMAGE_DIR}/")
+    + r"([\w-]+(?:\.\w+)?)"
+)
+
+
+def _perseus_archive_asset_paths(zipf, item_path):
+    """Archive paths of the images and graphie parts a Perseus question uses."""
+    archived = set(zipf.namelist())
+    names = set(
+        _perseus_archive_asset_regex.findall(zipf.read(item_path).decode("utf-8"))
+    )
+    return sorted(
+        path
+        for name in names
+        for path in (
+            f"{_PERSEUS_ARCHIVE_IMAGE_DIR}/{name}",
+            f"{_PERSEUS_ARCHIVE_IMAGE_DIR}/{name}.svg",
+            f"{_PERSEUS_ARCHIVE_IMAGE_DIR}/{name}-data.json",
+        )
+        if path in archived
+    )
 
 
 def generate_assessment_item(

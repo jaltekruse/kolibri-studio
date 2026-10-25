@@ -618,6 +618,22 @@ class QTIRestoreTestCase(StudioTestCase):
         self.assertEqual(restored_graphie.original_filename, "graph1")
         self._assert_republishes_source_package(QTIExerciseGenerator)
 
+    def test_perseus_question_in_exercise_archive_restores_with_its_files(self):
+        graphie = fileobj_exercise_graphie(original_filename="graph1")
+        item = self._add_perseus_item(0, fileobj_exercise_image(color="blue"))
+        graphie_ref = f"web+graphie:{exercises.CONTENT_STORAGE_PLACEHOLDER}/graph1"
+        item.raw_data = item.raw_data.replace("Perseus", f"![]({graphie_ref})")
+        item.save()
+        graphie.assessment_item = item
+        graphie.save()
+        self._publish(PerseusExerciseGenerator)
+
+        (restored,) = self._restore(format_presets.EXERCISE)
+
+        self._assert_restores_source_rows([restored], [PERSEUS_ID])
+        restored_graphie = restored.files.get(preset_id=format_presets.EXERCISE_GRAPHIE)
+        self.assertEqual(restored_graphie.original_filename, "graph1")
+
     def _published_presets(self, node):
         """The node's archive presets after publishing the channel database."""
         node.complete = True
